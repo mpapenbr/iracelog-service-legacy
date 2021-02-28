@@ -42,6 +42,7 @@ crossbarConfig = ConfigSection()
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--version', action='version', version='fake data provider %s' % VERSION, help='show version and exit')    
+    
     parser.add_argument('--crossbar', help='specifies the crossbar websocket connection (ws://host:port/ws)')
     parser.add_argument('--realm', help='sets the url for the backend')
     parser.add_argument('--config',  help='use this config file', default="config.yaml")
