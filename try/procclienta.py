@@ -21,6 +21,8 @@ def runFromQueue(q, crossbar_websocket=None, realm="racelog", topic=None):
             print("joined {}: {}".format(session, details))
             
             await session.subscribe(handler, topic)        
+            
+
         except Exception as e:
             print("error registering rpc: {0}".format(e))
     # comp.start()

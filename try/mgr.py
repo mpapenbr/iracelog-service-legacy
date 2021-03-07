@@ -8,7 +8,10 @@ from logging import Logger
 import logging.config
 import multiprocessing as mp
 from multiprocessing import Process, Queue
-from sub import runFromQueue as subMain
+from procclienta import runFromQueue as subAMain
+from procclientb import runFromQueue as subBMain
+from noqueueclienta import runDirect as noqueueAMain
+
 
 class ConfigSection():
     def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager"):        
@@ -30,18 +33,29 @@ def main():
         mySession = session
         q = Queue()
 
-        def mgr_handler(msg, num):
+        def mgr_handler_queue(msg, num):
             print(f'{msg} with {num}')
             if num not in serviceLookup.keys():
                 print(f'start new process')
-                p = Process(target=subMain, args=((q,crossbarConfig.websocket, crossbarConfig.realm, f'dummy.{num}')))
+                p = Process(target=subAMain, args=((q,crossbarConfig.websocket, crossbarConfig.realm, f'dummy.{num}')))
                 p.start()
                 # p.daemon()
                 q.put({'num': 'b', 'crossbar_websocket': crossbarConfig.websocket, 'realm': 'racelog', 'topic': f'dummy.{num}' })
+                serviceLookup[num] = p
+
+        def mgr_handler(msg, num):
+            print(f'{msg} with {num}')
+            if num not in serviceLookup.keys():
+                print(f'start new process without queue')
+                p = Process(target=noqueueAMain, args=((crossbarConfig.websocket, crossbarConfig.realm, f'dummy.{num}', f'manager.command.{num}')))
+                p.start()
+                # p.daemon()                
+                serviceLookup[num] = p
 
         try:
             print("joined {}: {}".format(session, details))
             
+            await session.subscribe(mgr_handler_queue, u'dummy.mgr.queue')        
             await session.subscribe(mgr_handler, u'dummy.mgr')        
         except Exception as e:
             print("error registering rpc: {0}".format(e))

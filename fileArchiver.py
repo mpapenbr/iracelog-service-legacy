@@ -20,6 +20,39 @@ class ConfigSection():
 
 
         
+def runDirect(crossbar_websocket=None, realm="racelog",  topic=None, mgr_topic=None):
+    comp = Component(transports=crossbar_websocket, realm=realm)
+
+    @comp.on_join
+    async def joined(session, details):
+        print("session ready")
+        mySession = session
+        
+        makedirs(crossbarConfig.logdir, exist_ok=True)
+        timestr = datetime.now().strftime("%Y-%m-%d-%H%M%S")        
+        json_log_file = codecs.open(f"{crossbarConfig.logdir}/send-data-{timestr}.json", "w", encoding='utf-8')
+
+        def mgr_msg_handler(msg):
+            print(f'{msg} on mgr topic')
+            if (msg == 'QUIT'):
+                session.leave()
+                print 
+
+        def do_archive(a):
+            json_data = json.dumps(a)
+            print(f'received {len(json_data)} bytes ')
+            json_log_file.write(f'{json_data}\n')
+
+        try:
+            print("joined {}: {}".format(session, details))
+            
+            # await session.register(doSomething, crossbarConfig.rpcEndpoint)
+            await session.subscribe(do_archive, topic)       
+            await session.subscribe(mgr_msg_handler, mgr_topic)             
+        except Exception as e:
+            print("error registering subscriber: {0}".format(e))
+
+    run([comp])            
 
 
     
@@ -57,29 +90,5 @@ if __name__ == '__main__':
 
     print(f'Using this websocket: {crossbarConfig.websocket}')
 
-    comp = Component(transports=crossbarConfig.websocket, realm=crossbarConfig.realm)
-
-    @comp.on_join
-    async def joined(session, details):
-        print("session ready")
-        
-        makedirs(crossbarConfig.logdir, exist_ok=True)
-        timestr = datetime.now().strftime("%Y-%m-%d-%H%M%S")        
-        json_log_file = codecs.open(f"{crossbarConfig.logdir}/send-data-{timestr}.json", "w", encoding='utf-8')
-
-        def do_archive(a):
-            json_data = json.dumps(a)
-            print(f'received {len(json_data)} bytes ')
-            json_log_file.write(f'{json_data}\n')
-
-        try:
-            print("joined {}: {}".format(session, details))
-            
-            # await session.register(doSomething, crossbarConfig.rpcEndpoint)
-            await session.subscribe(do_archive, f'{crossbarConfig.topic}.{args.id}')        
-        except Exception as e:
-            print("error registering subscriber: {0}".format(e))
-
-    run([comp])            
-
+    runDirect(crossbarConfig.websocket, crossbarConfig.realm, crossbarConfig.topic, "nomanager")
 

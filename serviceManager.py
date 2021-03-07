@@ -4,9 +4,13 @@ from os import getenv
 import yaml
 from enum import Enum
 from autobahn.asyncio.component import Component, run
+from mainProcessorSubscriber import runDirect as livetimingMain
+from fileArchiver import runDirect as fileArchiverMain
+from multiprocessing import Process
+import multiprocessing as mp
+
 from logging import Logger
 import logging.config
-
 class ConfigSection():
     def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager"):        
         self.websocket = websocket
@@ -29,6 +33,7 @@ class ProviderData:
 def main():
     comp = Component(transports=crossbarConfig.websocket, realm=crossbarConfig.realm)
     serviceLookup = {}
+    mp.set_start_method('spawn')
 
     @comp.on_join
     async def joined(session, details):
@@ -37,14 +42,23 @@ def main():
 
         def register_provider(args):
             print(f'called with {args}')
-            key = args['key']
+            key = args['id']
             if key not in serviceLookup.keys():
                 serviceLookup[key] = ProviderData(key, args['manifests'])
+                p = Process(target=livetimingMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key, f'racelog.state.{key}', f'manager.command.{key}')))
+                p.start()
+                # p.daemon()                
+
+                p = Process(target=fileArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm,  f'racelog.state.{key}', f'manager.command.{key}')))
+                p.start()
+                
+
             else:            
                 log.debug(f"Provider with key {key} already registered")
 
         def remove_provider(key):            
             log.debug(f'remove_provider called with {key}')            
+            mySession.publish(f'manager.command.{key}', "QUIT")
             if key in serviceLookup.keys():
                 serviceLookup.pop(key)
                 return "removed"

@@ -33,7 +33,43 @@ class Message:
         self.payload = payload
 
 
+def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr_topic=None):
+    comp = Component(transports=crossbar_websocket, realm=realm)
+
+    @comp.on_join
+    async def joined(session, details):
+        print("session ready")
+        mySession = session
+        
+        def mgr_msg_handler(msg):
+            print(f'{msg} on mgr topic')
+            if (msg == 'QUIT'):
+                session.leave()
+                print 
+
+        def doSomething(a):
+            print(f'livetiming called with {a}')
+            x = a['payload']['session']
+            
+            mySession.publish(f"session.{id}", {'type': MessageType.SESSION.value, 'timestamp': a['timestamp'], 'data':x})
+            mySession.publish(f"messages.{id}", {'type': MessageType.INFO.value, 'timestamp': a['timestamp'], 'data':a['payload']['messages']})
+            mySession.publish(f"cars.{id}", {'type': MessageType.CARS.value, 'timestamp': a['timestamp'], 'data':a['payload']['cars']})
+            mySession.publish(f"pits.{id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'data':a['payload']['pits']})
+            
+
+        try:
+            print("joined {}: {}".format(session, details))
+            
+            # await session.register(doSomething, crossbarConfig.rpcEndpoint)
+            await session.subscribe(doSomething, f'{topic}')    
+            await session.subscribe(mgr_msg_handler, mgr_topic)            
+        except Exception as e:
+            print("error registering subscriber: {0}".format(e))
+
+    run([comp])            
     
+
+
 
 VERSION = "0.1"
 crossbarConfig = ConfigSection()
@@ -68,31 +104,6 @@ if __name__ == '__main__':
 
     print(f'Using this websocket: {crossbarConfig.websocket}')
 
-    comp = Component(transports=crossbarConfig.websocket, realm=crossbarConfig.realm)
-
-    @comp.on_join
-    async def joined(session, details):
-        print("session ready")
-        mySession = session
-        
-        def doSomething(a):
-            print(f'called with {a}')
-            x = a['payload']['session']
-            
-            mySession.publish(f"session.{args.id}", {'type': MessageType.SESSION.value, 'timestamp': a['timestamp'], 'data':x})
-            mySession.publish(f"messages.{args.id}", {'type': MessageType.INFO.value, 'timestamp': a['timestamp'], 'data':a['payload']['messages']})
-            mySession.publish(f"cars.{args.id}", {'type': MessageType.CARS.value, 'timestamp': a['timestamp'], 'data':a['payload']['cars']})
-            mySession.publish(f"pits.{args.id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'data':a['payload']['pits']})
-            
-
-        try:
-            print("joined {}: {}".format(session, details))
-            
-            # await session.register(doSomething, crossbarConfig.rpcEndpoint)
-            await session.subscribe(doSomething, f'{crossbarConfig.topic}.{args.id}')        
-        except Exception as e:
-            print("error registering subscriber: {0}".format(e))
-
-    run([comp])            
+    runDirect(crossbarConfig.websocket, crossbarConfig.realm, args.id, crossbarConfig.topic, "nomanager")
 
 
