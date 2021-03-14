@@ -49,7 +49,7 @@ def main():
                 p.start()
                 # p.daemon()                
 
-                p = Process(target=fileArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm,  f'racelog.state.{key}', f'manager.command.{key}')))
+                p = Process(target=fileArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'manager.command.{key}')))
                 p.start()
                 
 

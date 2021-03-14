@@ -20,7 +20,7 @@ class ConfigSection():
 
 
         
-def runDirect(crossbar_websocket=None, realm="racelog",  topic=None, mgr_topic=None):
+def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr_topic=None):
     comp = Component(transports=crossbar_websocket, realm=realm)
 
     @comp.on_join
@@ -30,13 +30,14 @@ def runDirect(crossbar_websocket=None, realm="racelog",  topic=None, mgr_topic=N
         
         makedirs(crossbarConfig.logdir, exist_ok=True)
         timestr = datetime.now().strftime("%Y-%m-%d-%H%M%S")        
-        json_log_file = codecs.open(f"{crossbarConfig.logdir}/send-data-{timestr}.json", "w", encoding='utf-8')
+        json_log_file = codecs.open(f"{crossbarConfig.logdir}/send-data-{id}-{timestr}.json", "w", encoding='utf-8')
 
         def mgr_msg_handler(msg):
             print(f'{msg} on mgr topic')
             if (msg == 'QUIT'):
+                json_log_file.close()
                 session.leave()
-                print 
+                print(f"{__file__} done")
 
         def do_archive(a):
             json_data = json.dumps(a)
@@ -47,6 +48,10 @@ def runDirect(crossbar_websocket=None, realm="racelog",  topic=None, mgr_topic=N
             print("joined {}: {}".format(session, details))
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
+            manifests = await session.call(u'racelog.get_manifests', id)
+            with codecs.open(f"{crossbarConfig.logdir}/manifest-{id}-{timestr}.json", "w", encoding='utf-8') as manifest_file:
+                manifest_file.write(json.dumps(manifests))
+                
             await session.subscribe(do_archive, topic)       
             await session.subscribe(mgr_msg_handler, mgr_topic)             
         except Exception as e:
@@ -90,5 +95,5 @@ if __name__ == '__main__':
 
     print(f'Using this websocket: {crossbarConfig.websocket}')
 
-    runDirect(crossbarConfig.websocket, crossbarConfig.realm, crossbarConfig.topic, "nomanager")
+    runDirect(crossbarConfig.websocket, crossbarConfig.realm, id, crossbarConfig.topic, "nomanager")
 

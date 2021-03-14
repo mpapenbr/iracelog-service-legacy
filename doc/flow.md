@@ -63,7 +63,8 @@ The manifest describes the message format that is uses for the respective topic.
 
 ## Unregister
 Endpoint: `racelog.unregister_provider`
-|Param|Value|Info|
-|-----|-----|----|
-|id |string| same as used in register 
 
+```
+id: the event id
+
+```

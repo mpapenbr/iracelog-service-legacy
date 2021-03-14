@@ -9,6 +9,7 @@ class MessageType(Enum):
     CARS = 4
     PITS = 5
     REGISTER_PROVIDER = 6
+    MANIFESTS = 7
     
 
 class Message:
