@@ -8,14 +8,18 @@ from mainProcessorSubscriber import runDirect as livetimingMain
 from fileArchiver import runDirect as fileArchiverMain
 from multiprocessing import Process
 import multiprocessing as mp
+import glob
+import codecs
+import json
 
 from logging import Logger
 import logging.config
 class ConfigSection():
-    def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager"):        
+    def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager",logdir="logs/json"):        
         self.websocket = websocket
         self.realm = realm
         self.rpcEndpoint = rpcEndpoint
+        self.logdir = logdir
     
     def merge(self, **entries):
         self.__dict__.update(entries)    
@@ -74,7 +78,27 @@ def main():
                 return [serviceLookup[key].manifests]
             return None
             
+        # Archive manager (move to own module)
+        def retrieve_archiver_manifest(id):
             
+            manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}-*.json');
+            if len(manifests) > 0:
+                with codecs.open(manifests[0], "r", encoding='utf-8') as data_file:
+                    lines = data_file.readlines()                    
+                    return lines
+            else:
+                return "{}"
+
+        def retrieve_archiver_data(id, from_timestamp):
+            log.debug("start retrieving data")
+            data_files = glob.glob(f'{crossbarConfig.logdir}/send-data-{id}-*.json');
+            with codecs.open(data_files[0], "r", encoding='utf-8') as data_file:
+                lines = f'[{",".join(data_file.readlines())}]'
+                json_data = json.loads(lines)                
+                ret = [x for x in json_data if x['timestamp'] > from_timestamp]                
+                log.debug(f"done retrieving data. got {len(ret)} results")
+                return "\n".join([json.dumps(x) for x in ret])
+        # Archive manager end
 
         try:
             print("joined {}: {}".format(session, details))
@@ -83,6 +107,12 @@ def main():
             await session.register(remove_provider, "racelog.remove_provider")
             await session.register(list_provider, "racelog.list_providers")
             await session.register(get_provider_manifests, "racelog.get_manifests")
+
+            # Archive manager
+            await session.register(retrieve_archiver_manifest, f"racelog.archive.get_manifest")
+            await session.register(retrieve_archiver_data, f"racelog.archive.get_data")
+            # Archive manager (end)
+
             # await session.subscribe(ondata, u'livetiming.directory')        
         except Exception as e:
             print("error registering rpc: {0}".format(e))

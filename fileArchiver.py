@@ -5,6 +5,7 @@ import yaml
 import json
 from datetime import datetime
 import codecs
+import glob
 from enum import Enum
 from autobahn.asyncio.component import Component, run
 
@@ -30,8 +31,11 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
         
         makedirs(crossbarConfig.logdir, exist_ok=True)
         timestr = datetime.now().strftime("%Y-%m-%d-%H%M%S")        
-        json_log_file = codecs.open(f"{crossbarConfig.logdir}/send-data-{id}-{timestr}.json", "w", encoding='utf-8')
+        json_file_name = f"{crossbarConfig.logdir}/send-data-{id}-{timestr}.json"
+        json_log_file = codecs.open(json_file_name, "w", encoding='utf-8')
 
+
+        
         def mgr_msg_handler(msg):
             print(f'{msg} on mgr topic')
             if (msg == 'QUIT'):
@@ -44,6 +48,28 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             print(f'received {len(json_data)} bytes ')
             json_log_file.write(f'{json_data}\n')
 
+        def retrieve_manifest(id):
+            
+            manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}-*.json');
+            if len(manifests) > 0:
+                with codecs.open(manifests[0], "r", encoding='utf-8') as data_file:
+                    lines = data_file.readlines()                    
+                    return lines
+            else:
+                return "{}"
+
+        def retrieve_data(id, from_timestamp):
+            
+            data_files = glob.glob(f'{crossbarConfig.logdir}/send-data-{id}-*.json');
+            with codecs.open(data_files[0], "r", encoding='utf-8') as data_file:
+                lines = data_file.readlines()
+                ret = []
+                for line in lines:
+                    json_data =  json.loads(line)
+                    if (json_data['timestamp'] > from_timestamp):
+                        ret.append(line)
+                return ret
+
         try:
             print("joined {}: {}".format(session, details))
             
@@ -51,7 +77,8 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             manifests = await session.call(u'racelog.get_manifests', id)
             with codecs.open(f"{crossbarConfig.logdir}/manifest-{id}-{timestr}.json", "w", encoding='utf-8') as manifest_file:
                 manifest_file.write(json.dumps(manifests))
-                
+
+            
             await session.subscribe(do_archive, topic)       
             await session.subscribe(mgr_msg_handler, mgr_topic)             
         except Exception as e:

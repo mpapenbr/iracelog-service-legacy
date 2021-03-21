@@ -50,17 +50,19 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
         def doSomething(a):
             print(f'livetiming called with {a}')
             x = a['payload']['session']
-            
+            sessionTime = -1 # TODO: get this via manifest from a['payload']['session']
             mySession.publish(f"session.{id}", {'type': MessageType.SESSION.value, 'timestamp': a['timestamp'], 'data':x})
-            mySession.publish(f"messages.{id}", {'type': MessageType.INFO.value, 'timestamp': a['timestamp'], 'data':a['payload']['messages']})
-            mySession.publish(f"cars.{id}", {'type': MessageType.CARS.value, 'timestamp': a['timestamp'], 'data':a['payload']['cars']})
-            mySession.publish(f"pits.{id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'data':a['payload']['pits']})
+            mySession.publish(f"messages.{id}", {'type': MessageType.INFO.value, 'timestamp': a['timestamp'], 'sessionTime': sessionTime,'data':a['payload']['messages']})
+            mySession.publish(f"cars.{id}", {'type': MessageType.CARS.value, 'timestamp': a['timestamp'], 'sessionTime': sessionTime, 'data':a['payload']['cars']})
+            mySession.publish(f"pits.{id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'sessionTime':sessionTime, 'data':a['payload']['pits']})
             
 
         try:
             print("joined {}: {}".format(session, details))
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
+
+            manifests = await session.call(u'racelog.get_manifests', id)
             await session.subscribe(doSomething, f'{topic}')    
             await session.subscribe(mgr_msg_handler, mgr_topic)            
         except Exception as e:
