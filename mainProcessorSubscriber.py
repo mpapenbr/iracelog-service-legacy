@@ -1,3 +1,4 @@
+import sys
 import asyncio
 import argparse
 import yaml
@@ -33,12 +34,17 @@ class Message:
         self.payload = payload
 
 
-def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr_topic=None):
-    comp = Component(transports=crossbar_websocket, realm=realm)
+def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr_topic=None, user=None, credentials=None):
+    comp = Component(transports=crossbar_websocket, realm=realm, 
+    authentication={
+        'ticket': {
+            'authid': user,
+            'ticket': credentials
+        }})
 
     @comp.on_join
     async def joined(session, details):
-        print("session ready")
+        print("livetiming session ready")
         mySession = session
         
         def mgr_msg_handler(msg):
@@ -48,17 +54,17 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
                 print 
 
         def doSomething(a):
-            print(f'livetiming called with {a}')
+            #print(f'livetiming called with {a}')
             x = a['payload']['session']
             sessionTime = -1 # TODO: get this via manifest from a['payload']['session']
-            mySession.publish(f"session.{id}", {'type': MessageType.SESSION.value, 'timestamp': a['timestamp'], 'data':x})
-            mySession.publish(f"messages.{id}", {'type': MessageType.INFO.value, 'timestamp': a['timestamp'], 'sessionTime': sessionTime,'data':a['payload']['messages']})
-            mySession.publish(f"cars.{id}", {'type': MessageType.CARS.value, 'timestamp': a['timestamp'], 'sessionTime': sessionTime, 'data':a['payload']['cars']})
-            mySession.publish(f"pits.{id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'sessionTime':sessionTime, 'data':a['payload']['pits']})
+            mySession.publish(f"racelog.session.{id}", {'type': MessageType.SESSION.value, 'timestamp': a['timestamp'], 'data':x})
+            mySession.publish(f"racelog.messages.{id}", {'type': MessageType.INFO.value, 'timestamp': a['timestamp'], 'sessionTime': sessionTime,'data':a['payload']['messages']})
+            mySession.publish(f"racelog.cars.{id}", {'type': MessageType.CARS.value, 'timestamp': a['timestamp'], 'sessionTime': sessionTime, 'data':a['payload']['cars']})
+            mySession.publish(f"racelog.pits.{id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'sessionTime':sessionTime, 'data':a['payload']['pits']})
             
 
         try:
-            print("joined {}: {}".format(session, details))
+            print("livetiming joined {}: {}".format(session, details))
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
 
@@ -66,8 +72,9 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             await session.subscribe(doSomething, f'{topic}')    
             await session.subscribe(mgr_msg_handler, mgr_topic)            
         except Exception as e:
-            print("error registering subscriber: {0}".format(e))
-
+            print("livetiming: error registering subscriber: {0}".format(e))
+       
+    
     run([comp])            
     
 

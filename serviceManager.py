@@ -1,3 +1,4 @@
+import sys
 import asyncio
 import argparse
 from os import getenv
@@ -15,11 +16,13 @@ import json
 from logging import Logger
 import logging.config
 class ConfigSection():
-    def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager",logdir="logs/json"):        
+    def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager",logdir="logs/json", user="datapublisher", credentials=None):        
         self.websocket = websocket
         self.realm = realm
         self.rpcEndpoint = rpcEndpoint
         self.logdir = logdir
+        self.user = user
+        self.credentials = credentials
     
     def merge(self, **entries):
         self.__dict__.update(entries)    
@@ -35,13 +38,19 @@ class ProviderData:
         return {'key':self.key, 'name': self.name, 'description': self.description}
     
 def main():
-    comp = Component(transports=crossbarConfig.websocket, realm=crossbarConfig.realm)
+    comp = Component(transports=crossbarConfig.websocket, realm=crossbarConfig.realm,
+    authentication={
+        'ticket': {
+            'authid': crossbarConfig.user,
+            'ticket': crossbarConfig.credentials
+        }})
     serviceLookup = {}
     mp.set_start_method('spawn')
 
+    
     @comp.on_join
     async def joined(session, details):
-        print("session ready")
+        print("service manager session ready")
         mySession = session
 
         def register_provider(args):
@@ -49,11 +58,11 @@ def main():
             key = args['id']
             if key not in serviceLookup.keys():
                 serviceLookup[key] = ProviderData(key, args['manifests'])
-                p = Process(target=livetimingMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key, f'racelog.state.{key}', f'manager.command.{key}')))
+                p = Process(target=livetimingMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key, f'racelog.state.{key}', f'racelog.manager.command.{key}', crossbarConfig.user, crossbarConfig.credentials)))
                 p.start()
                 # p.daemon()                
 
-                p = Process(target=fileArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'manager.command.{key}')))
+                p = Process(target=fileArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'racelog.manager.command.{key}')))
                 p.start()
                 
 
@@ -62,7 +71,7 @@ def main():
 
         def remove_provider(key):            
             log.debug(f'remove_provider called with {key}')            
-            mySession.publish(f'manager.command.{key}', "QUIT")
+            mySession.publish(f'racelog.manager.command.{key}', "QUIT")
             if key in serviceLookup.keys():
                 serviceLookup.pop(key)
                 return "removed"
@@ -117,7 +126,7 @@ def main():
         except Exception as e:
             print("error registering rpc: {0}".format(e))
 
-    run([comp])            
+    run([comp], log_level='debug')            
 
 
 ENV_CROSSBAR_URL="ENV_CROSSBAR_URL"

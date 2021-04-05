@@ -1,0 +1,9 @@
+**/__pychache__
+logs/**
+.devcontainer/
+.github/
+.vscode/
+doc/
+try/
+
+private.tar
