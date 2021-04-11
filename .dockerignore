@@ -2,8 +2,9 @@
 logs/**
 .devcontainer/
 .github/
+.git/
 .vscode/
 doc/
 try/
-
+config.yaml
 private.tar
