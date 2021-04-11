@@ -1,6 +1,8 @@
 import asyncio
 import argparse
-from os import makedirs, mkdir
+import os
+from pathlib import Path
+#from os import makedirs, mkdir,symlink,remove
 import yaml
 import json
 from datetime import datetime
@@ -20,6 +22,11 @@ class ConfigSection():
         self.__dict__.update(entries)    
 
 
+def remove_file_silent(fn):
+    try:        
+        os.remove(fn)
+    except OSError:
+        pass # don't care if link does not exist
         
 def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr_topic=None):
     comp = Component(transports=crossbar_websocket, realm=realm)
@@ -29,10 +36,22 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
         print("session ready")
         mySession = session
         
-        makedirs(crossbarConfig.logdir, exist_ok=True)
+        os.makedirs(crossbarConfig.logdir, exist_ok=True)
         timestr = datetime.now().strftime("%Y-%m-%d-%H%M%S")        
-        json_file_name = f"{crossbarConfig.logdir}/send-data-{id}-{timestr}.json"
+        fulldir = str(Path(crossbarConfig.logdir).resolve())
+        json_file_name = f"{fulldir}/data-{id}-{timestr}.json"
+        manifest_file_name = f"{fulldir}/manifest-{id}-{timestr}.json"
         json_log_file = codecs.open(json_file_name, "w", encoding='utf-8')
+        json_link_filename = f"{fulldir}/data-{id}.json" # used for http server access during workaround
+        manifest_link_filename = f"{fulldir}/manifest-{id}.json" # used for http server access during workaround
+        
+        remove_file_silent(json_link_filename)
+        remove_file_silent(manifest_link_filename)
+        pwd = os.curdir
+        os.chdir(fulldir)
+        os.symlink(Path(json_file_name).resolve().name, Path(json_link_filename).resolve().name)
+        os.symlink(Path(manifest_file_name).resolve().name, Path(manifest_link_filename).resolve().name)
+        os.chdir(pwd)
 
 
         
@@ -50,7 +69,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
 
         def retrieve_manifest(id):
             
-            manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}-*.json');
+            manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}.json');
             if len(manifests) > 0:
                 with codecs.open(manifests[0], "r", encoding='utf-8') as data_file:
                     lines = data_file.readlines()                    
@@ -60,7 +79,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
 
         def retrieve_data(id, from_timestamp):
             
-            data_files = glob.glob(f'{crossbarConfig.logdir}/send-data-{id}-*.json');
+            data_files = glob.glob(f'{crossbarConfig.logdir}/data-{id}.json');
             with codecs.open(data_files[0], "r", encoding='utf-8') as data_file:
                 lines = data_file.readlines()
                 ret = []
@@ -75,7 +94,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
             manifests = await session.call(u'racelog.get_manifests', id)
-            with codecs.open(f"{crossbarConfig.logdir}/manifest-{id}-{timestr}.json", "w", encoding='utf-8') as manifest_file:
+            with codecs.open(manifest_file_name, "w", encoding='utf-8') as manifest_file:
                 manifest_file.write(json.dumps(manifests))
 
             

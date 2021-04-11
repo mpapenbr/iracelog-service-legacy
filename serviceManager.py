@@ -90,7 +90,7 @@ def main():
         # Archive manager (move to own module)
         def retrieve_archiver_manifest(id):
             
-            manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}-*.json');
+            manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}.json');
             if len(manifests) > 0:
                 with codecs.open(manifests[0], "r", encoding='utf-8') as data_file:
                     lines = data_file.readlines()                    
@@ -100,7 +100,7 @@ def main():
 
         def retrieve_archiver_data(id, from_timestamp):
             log.debug("start retrieving data")
-            data_files = glob.glob(f'{crossbarConfig.logdir}/send-data-{id}-*.json');
+            data_files = glob.glob(f'{crossbarConfig.logdir}/data-{id}.json');
             with codecs.open(data_files[0], "r", encoding='utf-8') as data_file:
                 lines = f'[{",".join(data_file.readlines())}]'
                 json_data = json.loads(lines)                
