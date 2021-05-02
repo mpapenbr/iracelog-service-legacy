@@ -20,6 +20,7 @@ The time provider will send all of its data to the topic `racelog.state.{id}`. T
 |archiver | archive the incoming messages for later replay purposes|
 |analysis | provide some analysis data|
 
+
 ## Unregister time provider
 
 This can happen due to following events
@@ -28,7 +29,7 @@ This can happen due to following events
 
 If any of these events are detected the manager sends a **QUIT** message to each process it has created for that provider. 
 
-## 
+
 
 ## Communication between manager and process
 
@@ -68,3 +69,9 @@ Endpoint: `racelog.unregister_provider`
 id: the event id
 
 ```
+
+## Publish new provider
+In order to inform the sub modules about a new time provider session the manager will publish the data from the registration to this topic. Interested modules may do their setup when recieving this message.
+
+Topic: `racelog.manager.provider`
+

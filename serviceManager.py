@@ -55,6 +55,10 @@ def main():
 
         def register_provider(args):
             print(f'called with {args}')
+
+            # inform other handlers about the new provider
+            mySession.publish(f'racelog.manager.provider', args)
+
             key = args['id']
             if key not in serviceLookup.keys():
                 serviceLookup[key] = ProviderData(key, args['manifests'])
