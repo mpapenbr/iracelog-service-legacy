@@ -113,6 +113,35 @@ def main():
                 return "\n".join([json.dumps(x) for x in ret])
         # Archive manager end
 
+        # --start-- simulate a live provider by replaying a stored race 
+        # Note: do not use this when a "real" event with that key is active
+        # Note: this section is not indented to be permanent. Just for development
+
+        # gets the event key
+        def simulate_provider(id): 
+            print(f'id is {id} ')
+            if id not in serviceLookup.keys():
+                manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}.json');
+                if len(manifests) > 0:
+                    with codecs.open(manifests[0], "r", encoding='utf-8') as data_file:
+                        lines = data_file.readlines()        
+                        
+                        json_data = json.loads(lines[0])                
+                        # mySession.publish(f'racelog.manager.provider', {'id':id, 'manifests': json_data})
+                        serviceLookup[id] = ProviderData(id, json_data, name="Replay for Development", description=f"Info: {id}")
+                        
+        
+        # gets the event key
+        def remove_simulate_provider(id): 
+            print(f'remove simulator: id is {id} ')
+            if id in serviceLookup.keys():
+                serviceLookup.pop(id)
+                return "removed"
+            else:            
+                log.debug(f"Provider with key {id} not found")
+
+        # --end-- simulate a live provider by replaying a stored race 
+
         try:
             print("joined {}: {}".format(session, details))
             
@@ -125,6 +154,10 @@ def main():
             await session.register(retrieve_archiver_manifest, f"racelog.archive.get_manifest")
             await session.register(retrieve_archiver_data, f"racelog.archive.get_data")
             # Archive manager (end)
+
+             # debug listener, which simulate a race
+            await session.register(simulate_provider, "racelog.debug.simulate_provider")
+            await session.register(remove_simulate_provider, "racelog.debug.remove_provider")
 
             # await session.subscribe(ondata, u'livetiming.directory')        
         except Exception as e:
