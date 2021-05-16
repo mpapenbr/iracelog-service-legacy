@@ -41,16 +41,20 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
         fulldir = str(Path(crossbarConfig.logdir).resolve())
         json_file_name = f"{fulldir}/data-{id}-{timestr}.json"
         manifest_file_name = f"{fulldir}/manifest-{id}-{timestr}.json"
+        info_file_name = f"{fulldir}/manifest-{id}-{timestr}.json"
         json_log_file = codecs.open(json_file_name, "w", encoding='utf-8')
         json_link_filename = f"{fulldir}/data-{id}.json" # used for http server access during workaround
         manifest_link_filename = f"{fulldir}/manifest-{id}.json" # used for http server access during workaround
+        info_link_filename = f"{fulldir}/info-{id}.json" # used for http server access during workaround
         
         remove_file_silent(json_link_filename)
         remove_file_silent(manifest_link_filename)
+        remove_file_silent(info_link_filename)
         pwd = os.curdir
         os.chdir(fulldir)
         os.symlink(Path(json_file_name).resolve().name, Path(json_link_filename).resolve().name)
         os.symlink(Path(manifest_file_name).resolve().name, Path(manifest_link_filename).resolve().name)
+        os.symlink(Path(info_file_name).resolve().name, Path(info_link_filename).resolve().name)
         os.chdir(pwd)
 
 
@@ -94,8 +98,11 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
             manifests = await session.call(u'racelog.get_manifests', id)
-            with codecs.open(manifest_file_name, "w", encoding='utf-8') as manifest_file:
-                manifest_file.write(json.dumps(manifests))
+            with codecs.open(manifest_file_name, "w", encoding='utf-8') as file:
+                file.write(json.dumps(manifests))
+            info = await session.call(u'racelog.get_event_info', id)
+            with codecs.open(info_file_name, "w", encoding='utf-8') as file:
+                file.write(json.dumps(info))
 
             
             await session.subscribe(do_archive, topic)       
