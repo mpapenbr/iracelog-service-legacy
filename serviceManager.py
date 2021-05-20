@@ -5,6 +5,8 @@ from os import getenv
 import yaml
 from enum import Enum
 from autobahn.asyncio.component import Component, run
+from autobahn.wamp.types import CallResult
+
 from mainProcessorSubscriber import runDirect as livetimingMain
 from fileArchiver import runDirect as fileArchiverMain
 from multiprocessing import Process
@@ -28,11 +30,12 @@ class ConfigSection():
         self.__dict__.update(entries)    
 
 class ProviderData:
-    def __init__(self, key=None, manifests=[], name='NoName', description="NoDescription" ) -> None:
+    def __init__(self, key=None, manifests=[], info={}, name='NoName', description="NoDescription" ) -> None:
         self.key = key
         self.manifests = manifests
         self.name = name
         self.description = description
+        self.info = info
     
     def list_output(self):
         return {'key':self.key, 'name': self.name, 'description': self.description}
@@ -61,7 +64,7 @@ def main():
 
             key = args['id']
             if key not in serviceLookup.keys():
-                serviceLookup[key] = ProviderData(key, args['manifests'])
+                serviceLookup[key] = ProviderData(key=key, manifests=args['manifests'], info=args['info'])
                 p = Process(target=livetimingMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key, f'racelog.state.{key}', f'racelog.manager.command.{key}', crossbarConfig.user, crossbarConfig.credentials)))
                 p.start()
                 # p.daemon()                
@@ -90,6 +93,11 @@ def main():
             if key in serviceLookup:
                 return [serviceLookup[key].manifests]
             return None
+
+        def get_event_info(key):                        
+            if key in serviceLookup:
+                return [serviceLookup[key].info]
+            return None
             
         # Archive manager (move to own module)
         def retrieve_archiver_manifest(id):
@@ -101,6 +109,8 @@ def main():
                     return lines
             else:
                 return "{}"
+
+
 
         def retrieve_archiver_data(id, from_timestamp):
             log.debug("start retrieving data")
@@ -142,6 +152,10 @@ def main():
 
         # --end-- simulate a live provider by replaying a stored race 
 
+
+        # this is here to play around with different result types. use call on racelog.test to see results
+        def test_something():            
+            return CallResult("Huhu", ["xyz"], {'i':12, 's':"34"}, res0="single", res1=["abc"], res2={'a':12, 'c':"34"})
         try:
             print("joined {}: {}".format(session, details))
             
@@ -149,6 +163,7 @@ def main():
             await session.register(remove_provider, "racelog.remove_provider")
             await session.register(list_provider, "racelog.list_providers")
             await session.register(get_provider_manifests, "racelog.get_manifests")
+            await session.register(get_event_info, "racelog.get_event_info")
 
             # Archive manager
             await session.register(retrieve_archiver_manifest, f"racelog.archive.get_manifest")
@@ -158,6 +173,8 @@ def main():
              # debug listener, which simulate a race
             await session.register(simulate_provider, "racelog.debug.simulate_provider")
             await session.register(remove_simulate_provider, "racelog.debug.remove_provider")
+
+            await session.register(test_something, "racelog.test")
 
             # await session.subscribe(ondata, u'livetiming.directory')        
         except Exception as e:

@@ -75,3 +75,14 @@ In order to inform the sub modules about a new time provider session the manager
 
 Topic: `racelog.manager.provider`
 
+# Messages
+All messages sent via WAMP topics follow this schema
+
+```
+type: MessageType
+timestamp: number (unix seconds as float)
+payload: data according to MessageType
+```
+
+
+
