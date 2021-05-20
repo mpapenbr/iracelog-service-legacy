@@ -121,7 +121,7 @@ def main():
         def simulate_provider(id): 
             print(f'id is {id} ')
             if id not in serviceLookup.keys():
-                manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}.json');
+                manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}.json')
                 if len(manifests) > 0:
                     with codecs.open(manifests[0], "r", encoding='utf-8') as data_file:
                         lines = data_file.readlines()        
