@@ -7,3 +7,5 @@ crossbar:
   url: http://host.docker.internal:8090
   realm: racelog
   topic: racelog.state
+  user: datapublisher
+  credentials: abcdef
