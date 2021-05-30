@@ -1,6 +1,6 @@
 FROM python:3
 
-COPY * /
+COPY / /
 
 RUN pip install -r requirements.txt
 
