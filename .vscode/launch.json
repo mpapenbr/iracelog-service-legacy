@@ -10,6 +10,15 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Service manager",
+            "type": "python",
+            "request": "launch",
+            "program": "serviceManager.py",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env.dev"
+
         }
     ]
 }

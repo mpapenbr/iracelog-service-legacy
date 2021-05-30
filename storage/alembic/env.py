@@ -6,13 +6,17 @@ from sqlalchemy import pool
 
 from alembic import context
 
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
 # added by MP
 section = config.config_ini_section
-config.set_section_option(section, "SQLALCHEMY_URL", os.environ.get("SQLALCHEMY_URL"))
+# dbUrl = os.environ.get("DB_URL")
+# sqlalchemyUrl = os.environ.get("SQLALCHEMY_URL")
+# print(f"dbUrl: {dbUrl}\nsqlAlchemyUrl: {sqlalchemyUrl}")
+config.set_section_option(section, "SQLALCHEMY_URL", os.environ.get("DB_URL"))
 # end of added
 
 # Interpret the config file for Python logging.

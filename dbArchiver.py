@@ -10,6 +10,11 @@ import codecs
 import glob
 from enum import Enum
 from autobahn.asyncio.component import Component, run
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from storage.schema import Event,WampData
+
+ENV_DB_URL="DB_URL"
 
 class ConfigSection():
     def __init__(self, websocket="ws://hostname:port", realm="racelog", topic="racelog.state", logdir="logs/json"):        
@@ -35,74 +40,49 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
     async def joined(session, details):
         print("session ready")
         mySession = session
+        eventId = None
+        eng = create_engine(os.environ.get(ENV_DB_URL))
+        Session = sessionmaker(bind=eng)
         
-        os.makedirs(crossbarConfig.logdir, exist_ok=True)
-        timestr = datetime.now().strftime("%Y-%m-%d-%H%M%S")        
-        fulldir = str(Path(crossbarConfig.logdir).resolve())
-        json_file_name = f"{fulldir}/data-{id}-{timestr}.json"
-        manifest_file_name = f"{fulldir}/manifest-{id}-{timestr}.json"
-        info_file_name = f"{fulldir}/info-{id}-{timestr}.json"
-        json_log_file = codecs.open(json_file_name, "w", encoding='utf-8')
-        json_link_filename = f"{fulldir}/data-{id}.json" # used for http server access during workaround
-        manifest_link_filename = f"{fulldir}/manifest-{id}.json" # used for http server access during workaround
-        info_link_filename = f"{fulldir}/info-{id}.json" # used for http server access during workaround
-        
-        remove_file_silent(json_link_filename)
-        remove_file_silent(manifest_link_filename)
-        remove_file_silent(info_link_filename)
-        pwd = os.curdir
-        os.chdir(fulldir)
-        os.symlink(Path(json_file_name).resolve().name, Path(json_link_filename).resolve().name)
-        os.symlink(Path(manifest_file_name).resolve().name, Path(manifest_link_filename).resolve().name)
-        os.symlink(Path(info_file_name).resolve().name, Path(info_link_filename).resolve().name)
-        os.chdir(pwd)
-
-
         
         def mgr_msg_handler(msg):
             print(f'{msg} on mgr topic')
             if (msg == 'QUIT'):
-                json_log_file.close()
+                eng.dispose()
                 session.leave()
+                
                 print(f"{__file__} done")
 
         def do_archive(a):
-            json_data = json.dumps(a)
-            print(f'received {len(json_data)} bytes ')
-            json_log_file.write(f'{json_data}\n')
-
-        def retrieve_manifest(id):
             
-            manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}.json');
-            if len(manifests) > 0:
-                with codecs.open(manifests[0], "r", encoding='utf-8') as data_file:
-                    lines = data_file.readlines()                    
-                    return lines
-            else:
-                return "{}"
+            with eng.connect() as con:
+                dbSession = Session(bind=con)
+                w = WampData(EventId=eventId, Data=a)
+                dbSession.add(w)
+                dbSession.commit()
 
-        def retrieve_data(id, from_timestamp):
-            
-            data_files = glob.glob(f'{crossbarConfig.logdir}/data-{id}.json');
-            with codecs.open(data_files[0], "r", encoding='utf-8') as data_file:
-                lines = data_file.readlines()
-                ret = []
-                for line in lines:
-                    json_data =  json.loads(line)
-                    if (json_data['timestamp'] > from_timestamp):
-                        ret.append(line)
-                return ret
+        
 
         try:
             print("joined {}: {}".format(session, details))
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
-            manifests = await session.call(u'racelog.get_manifests', id)
-            with codecs.open(manifest_file_name, "w", encoding='utf-8') as file:
-                file.write(json.dumps(manifests))
+            manifests = await session.call(u'racelog.get_manifests', id)            
             info = await session.call(u'racelog.get_event_info', id)
-            with codecs.open(info_file_name, "w", encoding='utf-8') as file:
-                file.write(json.dumps(info))
+            print(f"{info}")
+            event_data = dict()
+            event_data['manifests'] = manifests[0]
+            event_data['info'] = info[0]
+            
+            with eng.connect() as con:
+                dbSession = Session(bind=con)
+                entry = dbSession.query(Event).filter_by(EventKey=id).first()    
+                if (entry == None):
+                    entry = Event(Name=f"test-{id}", EventKey=id, Data=event_data)
+                    dbSession.add(entry)
+                    dbSession.flush()
+                dbSession.commit()
+                eventId = entry.Id
 
             
             await session.subscribe(do_archive, topic)       

@@ -1,3 +1,4 @@
+from dbAccess import read_events, read_manifest
 import sys
 import asyncio
 import argparse
@@ -9,6 +10,7 @@ from autobahn.wamp.types import CallResult
 
 from mainProcessorSubscriber import runDirect as livetimingMain
 from fileArchiver import runDirect as fileArchiverMain
+from dbArchiver import runDirect as dbArchiverMain
 from multiprocessing import Process
 import multiprocessing as mp
 import glob
@@ -18,13 +20,14 @@ import json
 from logging import Logger
 import logging.config
 class ConfigSection():
-    def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager",logdir="logs/json", user="datapublisher", credentials=None):        
+    def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager",logdir="logs/json", user="datapublisher", credentials=None, dbUrl=None):        
         self.websocket = websocket
         self.realm = realm
         self.rpcEndpoint = rpcEndpoint
         self.logdir = logdir
         self.user = user
         self.credentials = credentials
+        self.dbUrl = dbUrl
     
     def merge(self, **entries):
         self.__dict__.update(entries)    
@@ -51,6 +54,7 @@ def main():
     mp.set_start_method('spawn')
 
     
+    
     @comp.on_join
     async def joined(session, details):
         print("service manager session ready")
@@ -70,6 +74,9 @@ def main():
                 # p.daemon()                
 
                 p = Process(target=fileArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'racelog.manager.command.{key}')))
+                p.start()
+                
+                p = Process(target=dbArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'racelog.manager.command.{key}')))
                 p.start()
                 
 
@@ -100,7 +107,7 @@ def main():
             return None
             
         # Archive manager (move to own module)
-        def retrieve_archiver_manifest(id):
+        def retrieve_archiver_manifest_file(id):
             
             manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}.json');
             if len(manifests) > 0:
@@ -109,6 +116,12 @@ def main():
                     return lines
             else:
                 return "{}"
+
+        def retrieve_archiver_manifest_db(id):
+            return read_manifest(id)
+
+        def retrieve_archived_events():
+            return read_events();
 
 
 
@@ -166,7 +179,8 @@ def main():
             await session.register(get_event_info, "racelog.get_event_info")
 
             # Archive manager
-            await session.register(retrieve_archiver_manifest, f"racelog.archive.get_manifest")
+            await session.register(retrieve_archived_events, f"racelog.archive.events")
+            await session.register(retrieve_archiver_manifest_db, f"racelog.archive.get_manifest")
             await session.register(retrieve_archiver_data, f"racelog.archive.get_data")
             # Archive manager (end)
 
@@ -183,7 +197,8 @@ def main():
     run([comp], log_level='debug')            
 
 
-ENV_CROSSBAR_URL="ENV_CROSSBAR_URL"
+ENV_CROSSBAR_URL="CROSSBAR_URL"
+ENV_DB_URL="DB_URL"
 VERSION = "0.1"
 crossbarConfig = ConfigSection()
 
@@ -212,6 +227,10 @@ if __name__ == '__main__':
     # TODO: settings via environment
     if getenv(key=ENV_CROSSBAR_URL) != None:
         crossbarConfig.websocket = getenv(key=ENV_CROSSBAR_URL)
+        
+    if getenv(key=ENV_DB_URL) != None:
+        crossbarConfig.dbUrl = getenv(key=ENV_DB_URL)
+    
     if args.crossbar:
         crossbarConfig.websocket = args.crossbar
 
@@ -220,6 +239,7 @@ if __name__ == '__main__':
         logging.config.dictConfig(config)
     log = logging.getLogger("ServiceManager")
     log.info(f'Using this websocket: {crossbarConfig.websocket}')
+    log.info(f'Using this dbUrl: {crossbarConfig.dbUrl}')
 
     main()
 
