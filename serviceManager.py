@@ -1,4 +1,4 @@
-from dbAccess import read_events, read_manifest
+from dbAccess import compose_replay_infos, read_events, read_manifest, read_wamp_data
 import sys
 import asyncio
 import argparse
@@ -7,7 +7,7 @@ import yaml
 from enum import Enum
 from autobahn.asyncio.component import Component, run
 from autobahn.wamp.types import CallResult
-
+from autobahn.asyncio.websocket import WebSocketClientFactory
 from mainProcessorSubscriber import runDirect as livetimingMain
 from fileArchiver import runDirect as fileArchiverMain
 from dbArchiver import runDirect as dbArchiverMain
@@ -17,7 +17,7 @@ import glob
 import codecs
 import json
 
-from logging import Logger
+from logging import Logger, debug
 import logging.config
 class ConfigSection():
     def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager",logdir="logs/json", user="datapublisher", credentials=None, dbUrl=None):        
@@ -44,7 +44,8 @@ class ProviderData:
         return {'key':self.key, 'name': self.name, 'description': self.description}
     
 def main():
-    comp = Component(transports=crossbarConfig.websocket, realm=crossbarConfig.realm,
+    #WebSocketClientFactory.setProtocolOptions(logFrames=True)
+    comp = Component(transports=crossbarConfig.websocket, realm=crossbarConfig.realm, 
     authentication={
         'ticket': {
             'authid': crossbarConfig.user,
@@ -106,22 +107,21 @@ def main():
                 return [serviceLookup[key].info]
             return None
             
-        # Archive manager (move to own module)
-        def retrieve_archiver_manifest_file(id):
-            
-            manifests = glob.glob(f'{crossbarConfig.logdir}/manifest-{id}.json');
-            if len(manifests) > 0:
-                with codecs.open(manifests[0], "r", encoding='utf-8') as data_file:
-                    lines = data_file.readlines()                    
-                    return lines
-            else:
-                return "{}"
+        # Archive manager (move to own module)        
 
-        def retrieve_archiver_manifest_db(id):
-            return read_manifest(id)
+        def retrieve_archiver_manifest_db(eventKey):
+            return read_manifest(eventKey)
 
         def retrieve_archived_events():
             return read_events();
+
+        def retrieve_archived_wamp_data(eventId=None, tsBegin=0, num=20):
+            ret = read_wamp_data(eventId,tsBegin,num);            
+            return ret
+
+        def retrieve_archived_replay_info(eventId=None):
+            ret = compose_replay_infos(eventId);            
+            return ret
 
 
 
@@ -182,6 +182,9 @@ def main():
             await session.register(retrieve_archived_events, f"racelog.archive.events")
             await session.register(retrieve_archiver_manifest_db, f"racelog.archive.get_manifest")
             await session.register(retrieve_archiver_data, f"racelog.archive.get_data")
+            await session.register(retrieve_archived_wamp_data, f"racelog.archive.wamp")
+            await session.register(retrieve_archived_replay_info, f"racelog.archive.replay_info")
+            # Archive manager (end)
             # Archive manager (end)
 
              # debug listener, which simulate a race
