@@ -10,6 +10,7 @@ class MessageType(Enum):
     PITS = 5
     REGISTER_PROVIDER = 6
     MANIFESTS = 7
+    STATE_DELTA = 8
     
 
 class Message:

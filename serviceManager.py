@@ -1,4 +1,4 @@
-from dbAccess import compose_replay_infos, read_events, read_manifest, read_wamp_data
+from dbAccess import compose_replay_infos, compute_diffs, read_events, read_manifest, read_wamp_data, read_wamp_data_diff
 import sys
 import asyncio
 import argparse
@@ -118,9 +118,17 @@ def main():
         def retrieve_archived_wamp_data(eventId=None, tsBegin=0, num=20):
             ret = read_wamp_data(eventId,tsBegin,num);            
             return ret
+            
+        def retrieve_archived_wamp_data_delta(eventId=None, tsBegin=0, num=20):
+            ret = read_wamp_data_diff(eventId,tsBegin,num);            
+            return ret
 
         def retrieve_archived_replay_info(eventId=None):
             ret = compose_replay_infos(eventId);            
+            return ret
+
+        def retrieve_archived_replay_data(eventId=None):
+            ret = compute_diffs(eventId);            
             return ret
 
 
@@ -183,7 +191,9 @@ def main():
             await session.register(retrieve_archiver_manifest_db, f"racelog.archive.get_manifest")
             await session.register(retrieve_archiver_data, f"racelog.archive.get_data")
             await session.register(retrieve_archived_wamp_data, f"racelog.archive.wamp")
+            await session.register(retrieve_archived_wamp_data_delta, f"racelog.archive.wamp.delta")
             await session.register(retrieve_archived_replay_info, f"racelog.archive.replay_info")
+            await session.register(retrieve_archived_replay_data, f"racelog.archive.replay_data")
             # Archive manager (end)
             # Archive manager (end)
 

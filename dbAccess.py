@@ -1,5 +1,6 @@
 import asyncio
 import argparse
+from model.message import Message, MessageType
 
 
 from dbArchiver import ENV_DB_URL
@@ -44,33 +45,124 @@ def read_wamp_data(eventId=None,tsBegin=None, num=10):
     with eng.connect() as con:        
         res = con.execute(text("""
         select data from wampdata 
-        where event_id=:eventId and (data->'timestamp')::decimal > :tsBegin 
-        order by (data->'timestamp')::decimal asc 
+        where event_id=:eventId and stamp > :tsBegin 
+        order by stamp asc 
         limit :num
         """).bindparams(eventId=eventId, tsBegin=tsBegin, num=num))
         ret = [row[0] for row in res]
         return ret
 
+def read_wamp_data_diff(eventId=None,tsBegin=None, num=10):
+    def compute_car_changes(ref, cur):
+        changes = []
+        # carsRef = ref[0]['payload']['cars']
+        # carsCur = cur[0]['payload']['cars']
+        for i in range(len(ref)):
+            for j in range(len(ref[i])):                    
+                if ref[i][j] != cur [i][j]:
+                    changes.append([i,j,cur[i][j]])
+        return changes
+
+    def compute_session_changes(ref, cur):
+        changes = []
+        
+        for i in range(len(ref)):        
+            if ref[i] != cur [i]:
+                changes.append([i,cur[i]])
+        return changes
+            
+
+    with eng.connect() as con:        
+        res = con.execute(text("""
+        select data from wampdata 
+        where event_id=:eventId and stamp > :tsBegin 
+        order by stamp asc 
+        limit :num
+        """).bindparams(eventId=eventId, tsBegin=tsBegin, num=num))
+        work = [row[0] for row in res]
+        ret = [work[0]]
+        ref = work[0]
+        for cur in work[1:]:
+            entry = {
+                'cars': compute_car_changes(ref['payload']['cars'], cur['payload']['cars']),
+                'session': compute_session_changes(ref['payload']['session'], cur['payload']['session']),
+                }
+            ret.append({'type':MessageType.STATE_DELTA.value, 'payload':entry, 'timestamp':cur['timestamp']})
+            
+        return ret
+
 def compose_replay_infos(eventId=None):
     with eng.connect() as con:        
+
+        stmtBoundary = """
+            select id,(w.data->'payload'->'session'->0)::float as st, w.stamp   from wampdata w
+                where w.event_id=:eventId 
+                and jsonb_array_length(w.data->'payload'->'cars') > 0
+                order by w.stamp {orderArg}
+                limit 1
+        """
+
+        # this will detect race start and checkered flag if available. We only need race start
         stmt = """
-        select id,(w.data->'payload'->'session'->0)::float as st  from wampdata w
+            select  w.stamp, (w.data->'payload'->'session'->0)::float as st
+            from wampdata w where 
+            w.event_id=:eventId
+            and w.data->'payload'->'messages'->0->>0 = 'Timing' 
+            and w.data->'payload'->'messages'->0->>1 = 'RaceControl' 
+            order by w.stamp
+        """
+        res = con.execute(text(stmt).bindparams(eventId=eventId))
+        low = next(iter(res),None)
+        if (low != None):
+            minSt = low[1]
+            minTs = low[0]
+            
+        else:
+           
+            res = con.execute(text(stmtBoundary.format(orderArg='asc')).bindparams(eventId=eventId))
+            low = next(iter(res))
+            minSt = low[1]
+            minTs = low[2]
+
+        res = con.execute(text(stmtBoundary.format(orderArg='desc')).bindparams(eventId=eventId))
+        high = next(iter(res))
+        
+            
+        dbSession = Session(bind=con)
+        res = dbSession.query(Event).filter_by(Id=eventId).first()                
+        ret = {'event': res.toDict(), 'minSessionTime': minSt, 'maxSessionTime': high[1], 'minTimestamp': minTs}
+
+        return ret
+
+def compute_diffs(eventId=None):
+    with eng.connect() as con:        
+        stmt = """
+        select id,(w.data->'payload'->'session'->0)::float as st, (w.data->'timestamp')::float   from wampdata w
             where w.event_id=:eventId 
             and jsonb_array_length(w.data->'payload'->'cars') > 0
             order by st {orderArg}
-            limit 1
+            limit 10
+        """
+        stmt = """
+        select w.data from wampdata w where w.event_id=:eventId and jsonb_array_length(w.data->'payload'->'cars') > 0 order by id {orderArg} 
+        --limit 10
         """
         res = con.execute(text(stmt.format(orderArg='asc')).bindparams(eventId=eventId))
-        low = next(iter(res))
-        res = con.execute(text(stmt.format(orderArg='desc')).bindparams(eventId=eventId))
-        high = next(iter(res))
-        print(low[1])
-        
-        dbSession = Session(bind=con)
-        res = dbSession.query(Event).filter_by(Id=eventId).first()    
-        
-        ret = {'event': res.toDict(), 'minSessionTime': low[1], 'maxSessionTime': high[1]}
-
+        it = iter(res)
+        ref = next(it)
+        cur = next(it,None)
+        changes = []
+        while cur != None:
+            carsRef = ref[0]['payload']['cars']
+            carsCur = cur[0]['payload']['cars']
+            for i in range(len(carsRef)):
+                for j in range(len(carsRef[i])):                    
+                    if carsRef[i][j] != carsCur [i][j]:
+                        changes.append([i,j,carsCur[i][j]])
+            ref = cur
+            
+            cur = next(it,None)            
+        ret = changes
         return ret
 
         
@@ -80,5 +172,9 @@ if __name__ == '__main__':
     # print(f'{read_manifest("1")}')
     # print(f'{read_events()}')
     # print(f'{read_wamp_data(eventId=15, tsBegin=1615734697.6675763, num=2)}')
-    print(f'{compose_replay_infos(15)}')
+    #print(f'{compose_replay_infos(20)}')
+    print(f'{read_wamp_data_diff(eventId=15, tsBegin=1615734697.6675763, num=5)}')
+    # with codecs.open("test.json", "w", encoding='utf-8') as f:
+    #     res = compute_diffs(20)
+    #     f.writelines(json.dumps(res))
 
