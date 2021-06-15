@@ -25,6 +25,12 @@ eng = create_engine(os.environ.get(ENV_DB_URL), pool_pre_ping=True, echo_pool=Tr
 Session = sessionmaker(bind=eng)
 print("Plain called and init done")
 
+def read_event_info(eventId):
+    with eng.connect() as con:
+        dbSession = Session(bind=con)
+        res = dbSession.query(Event).filter_by(Id=eventId).first()    
+        return res.toDict()
+
 def read_manifest(eventKey):
     with eng.connect() as con:
         dbSession = Session(bind=con)
@@ -45,8 +51,8 @@ def read_wamp_data(eventId=None,tsBegin=None, num=10):
     with eng.connect() as con:        
         res = con.execute(text("""
         select data from wampdata 
-        where event_id=:eventId and stamp > :tsBegin 
-        order by stamp asc 
+        where event_id=:eventId and (data->'timestamp')::numeric > :tsBegin 
+        order by (data->'timestamp')::numeric asc 
         limit :num
         """).bindparams(eventId=eventId, tsBegin=tsBegin, num=num))
         ret = [row[0] for row in res]
@@ -75,8 +81,8 @@ def read_wamp_data_diff(eventId=None,tsBegin=None, num=10):
     with eng.connect() as con:        
         res = con.execute(text("""
         select data from wampdata 
-        where event_id=:eventId and stamp > :tsBegin 
-        order by stamp asc 
+        where event_id=:eventId and (data->'timestamp')::numeric > :tsBegin 
+        order by (data->'timestamp')::numeric asc 
         limit :num
         """).bindparams(eventId=eventId, tsBegin=tsBegin, num=num))
         work = [row[0] for row in res]
@@ -91,25 +97,26 @@ def read_wamp_data_diff(eventId=None,tsBegin=None, num=10):
             
         return ret
 
+
 def compose_replay_infos(eventId=None):
     with eng.connect() as con:        
 
         stmtBoundary = """
-            select id,(w.data->'payload'->'session'->0)::float as st, w.stamp   from wampdata w
+            select id,(w.data->'payload'->'session'->0)::float as st, (w.data->'timestamp')::float   from wampdata w
                 where w.event_id=:eventId 
                 and jsonb_array_length(w.data->'payload'->'cars') > 0
-                order by w.stamp {orderArg}
+                order by (w.data->'timestamp')::numeric {orderArg}
                 limit 1
         """
 
         # this will detect race start and checkered flag if available. We only need race start
         stmt = """
-            select  w.stamp, (w.data->'payload'->'session'->0)::float as st
+            select  (w.data->'timestamp')::float as stamp, (w.data->'payload'->'session'->0)::float as st
             from wampdata w where 
             w.event_id=:eventId
             and w.data->'payload'->'messages'->0->>0 = 'Timing' 
             and w.data->'payload'->'messages'->0->>1 = 'RaceControl' 
-            order by w.stamp
+            order by stamp
         """
         res = con.execute(text(stmt).bindparams(eventId=eventId))
         low = next(iter(res),None)
@@ -126,13 +133,12 @@ def compose_replay_infos(eventId=None):
 
         res = con.execute(text(stmtBoundary.format(orderArg='desc')).bindparams(eventId=eventId))
         high = next(iter(res))
-        
             
-        dbSession = Session(bind=con)
-        res = dbSession.query(Event).filter_by(Id=eventId).first()                
-        ret = {'event': res.toDict(), 'minSessionTime': minSt, 'maxSessionTime': high[1], 'minTimestamp': minTs}
+        
+        ret = {'minSessionTime': minSt, 'maxSessionTime': high[1], 'minTimestamp': minTs}
 
         return ret
+
 
 def compute_diffs(eventId=None):
     with eng.connect() as con:        

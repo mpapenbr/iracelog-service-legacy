@@ -13,6 +13,7 @@ from autobahn.asyncio.component import Component, run
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from storage.schema import Event,WampData
+from dbAccess import compose_replay_infos
 
 ENV_DB_URL="DB_URL"
 
@@ -48,6 +49,12 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
         def mgr_msg_handler(msg):
             print(f'{msg} on mgr topic')
             if (msg == 'QUIT'):
+                dbSession = Session(bind=con)
+                res = compose_replay_infos(eventId=eventId)
+                newData = {'replayInfo': res}
+                jsonData = json.dumps(newData)
+                con.execute(f"update event set data = mgm_jsonb_merge(data, '{jsonData}'::jsonb) where id={eventId}")
+                dbSession.commit()
                 eng.dispose()
                 session.leave()
                 
