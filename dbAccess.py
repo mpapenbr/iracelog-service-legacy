@@ -3,7 +3,7 @@ import argparse
 from model.message import Message, MessageType
 
 
-from dbArchiver import ENV_DB_URL
+
 import os
 from pathlib import Path
 #from os import makedirs, mkdir,symlink,remove
