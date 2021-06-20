@@ -10,6 +10,13 @@ import codecs
 import glob
 from enum import Enum
 from autobahn.asyncio.component import Component, run
+import logging
+import logging.config
+
+with open('logging.yaml', 'r') as f:
+    config = yaml.safe_load(f.read())
+    logging.config.dictConfig(config)
+log = logging.getLogger("fileArchiver")
 
 class ConfigSection():
     def __init__(self, websocket="ws://hostname:port", realm="racelog", topic="racelog.state", logdir="logs/json"):        
@@ -33,7 +40,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
 
     @comp.on_join
     async def joined(session, details):
-        print("session ready")
+        log.info("fileArchiver ready")
         mySession = session
         
         os.makedirs(crossbarConfig.logdir, exist_ok=True)
@@ -60,15 +67,16 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
 
         
         def mgr_msg_handler(msg):
-            print(f'{msg} on mgr topic')
+            log.debug(f'{msg} on mgr topic')
             if (msg == 'QUIT'):
                 json_log_file.close()
                 session.leave()
-                print(f"{__file__} done")
+                log.info(f"leaving wamp session for eventKey {id}")
+                
 
         def do_archive(a):
             json_data = json.dumps(a)
-            print(f'received {len(json_data)} bytes ')
+            log.debug(f'received {len(json_data)} bytes ')
             json_log_file.write(f'{json_data}\n')
 
         def retrieve_manifest(id):
@@ -94,7 +102,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
                 return ret
 
         try:
-            print("joined {}: {}".format(session, details))
+            log.debug("joined {}: {}".format(session, details))
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
             manifests = await session.call(u'racelog.get_manifests', id)
@@ -108,7 +116,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             await session.subscribe(do_archive, topic)       
             await session.subscribe(mgr_msg_handler, mgr_topic)             
         except Exception as e:
-            print("error registering subscriber: {0}".format(e))
+            log.error("error registering subscriber: {0}".format(e))
 
     run([comp])            
 

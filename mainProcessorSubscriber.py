@@ -4,6 +4,13 @@ import argparse
 import yaml
 from enum import Enum
 from autobahn.asyncio.component import Component, run
+import logging
+import logging.config
+
+with open('logging.yaml', 'r') as f:
+    config = yaml.safe_load(f.read())
+    logging.config.dictConfig(config)
+log = logging.getLogger("messageProcessor")
 
 class ConfigSection():
     def __init__(self, websocket="ws://hostname:port", realm="racelog", topic="racelog.state"):        
@@ -44,14 +51,14 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
 
     @comp.on_join
     async def joined(session, details):
-        print("livetiming session ready")
+        log.info("livetiming session ready")
         mySession = session
         
         def mgr_msg_handler(msg):
-            print(f'{msg} on mgr topic')
+            log.debug(f'{msg} on mgr topic')
             if (msg == 'QUIT'):
                 session.leave()
-                print 
+                log.info("Leaving wamp session") 
 
         def doSomething(a):
             #print(f'livetiming called with {a}')
@@ -64,7 +71,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             
 
         try:
-            print("livetiming joined {}: {}".format(session, details))
+            log.debug("livetiming joined {}: {}".format(session, details))
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
 
@@ -72,7 +79,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             await session.subscribe(doSomething, f'{topic}')    
             await session.subscribe(mgr_msg_handler, mgr_topic)            
         except Exception as e:
-            print("livetiming: error registering subscriber: {0}".format(e))
+            log.error("livetiming: error registering subscriber: {0}".format(e))
        
     
     run([comp])            

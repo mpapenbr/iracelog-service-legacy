@@ -14,8 +14,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from storage.schema import Event,WampData
 from dbAccess import compose_replay_infos
+import logging
+import logging.config
 
 ENV_DB_URL="DB_URL"
+
+
+with open('logging.yaml', 'r') as f:
+    config = yaml.safe_load(f.read())
+    logging.config.dictConfig(config)
+log = logging.getLogger("dbArchiver")
 
 class ConfigSection():
     def __init__(self, websocket="ws://hostname:port", realm="racelog", topic="racelog.state", logdir="logs/json"):        
@@ -39,7 +47,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
 
     @comp.on_join
     async def joined(session, details):
-        print("session ready")
+        log.debug("session ready")
         mySession = session
         eventId = None
         eng = create_engine(os.environ.get(ENV_DB_URL))
@@ -47,18 +55,20 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
         
         
         def mgr_msg_handler(msg):
-            print(f'{msg} on mgr topic')
+            log.debug(f'{msg} on mgr topic')
             if (msg == 'QUIT'):
-                dbSession = Session(bind=con)
-                res = compose_replay_infos(eventId=eventId)
-                newData = {'replayInfo': res}
-                jsonData = json.dumps(newData)
-                con.execute(f"update event set data = mgm_jsonb_merge(data, '{jsonData}'::jsonb) where id={eventId}")
-                dbSession.commit()
-                eng.dispose()
+                with eng.connect() as con:                    
+                    res = compose_replay_infos(eventId=eventId)
+                    newData = {'replayInfo': res}
+                    jsonData = json.dumps(newData)
+                    dbSession = Session(bind=con)
+                    con.execute(f"update event set data = mgm_jsonb_merge(data, '{jsonData}'::jsonb) where id={eventId}")
+                    dbSession.commit();
+                    eng.dispose()
                 session.leave()
+                log.info(f"leaving wamp session for eventId {eventId}")
                 
-                print(f"{__file__} done")
+                
 
         def do_archive(a):
             
@@ -71,12 +81,12 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
         
 
         try:
-            print("joined {}: {}".format(session, details))
+            log.debug("joined {}: {}".format(session, details))
             
             # await session.register(doSomething, crossbarConfig.rpcEndpoint)
             manifests = await session.call(u'racelog.get_manifests', id)            
             info = await session.call(u'racelog.get_event_info', id)
-            print(f"{info}")
+            #print(f"{info}")
             event_data = dict()
             event_data['manifests'] = manifests[0]
             event_data['info'] = info[0]
@@ -95,7 +105,7 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             await session.subscribe(do_archive, topic)       
             await session.subscribe(mgr_msg_handler, mgr_topic)             
         except Exception as e:
-            print("error registering subscriber: {0}".format(e))
+            log.error("error registering subscriber: {0}".format(e))
 
     run([comp])            
 

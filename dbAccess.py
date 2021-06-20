@@ -1,7 +1,7 @@
 import asyncio
 import argparse
 from model.message import Message, MessageType
-
+import logging
 
 
 import os
@@ -16,7 +16,7 @@ from enum import Enum
 from autobahn.asyncio.component import Component, run
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from storage.schema import Event,WampData
+from storage.schema import Event, EventExtraData, TrackData,WampData
 
 ENV_DB_URL="DB_URL"
 
@@ -25,11 +25,14 @@ eng = create_engine(os.environ.get(ENV_DB_URL), pool_pre_ping=True, echo_pool=Tr
 Session = sessionmaker(bind=eng)
 print("Plain called and init done")
 
+log = logging.getLogger("dbAccess")
+
 def read_event_info(eventId):
     with eng.connect() as con:
         dbSession = Session(bind=con)
         res = dbSession.query(Event).filter_by(Id=eventId).first()    
         return res.toDict()
+
 
 def read_manifest(eventKey):
     with eng.connect() as con:
@@ -39,6 +42,15 @@ def read_manifest(eventKey):
             return x.Data['manifests']
         else:
             return {}
+
+def get_track_info(trackId):
+    with eng.connect() as con:
+        dbSession = Session(bind=con)
+        res = dbSession.query(TrackData).filter_by(Id=trackId).first()    
+        if res != None:
+            return res.Data
+            
+
 
 def read_events():
     with eng.connect() as con:
@@ -171,6 +183,28 @@ def compute_diffs(eventId=None):
         ret = changes
         return ret
 
+def store_event_extra_data(eventKey=None, extraData={}):
+    with eng.connect() as con:        
+        dbSession = Session(bind=con)
+        res = dbSession.query(Event).filter_by(EventKey=eventKey).first()    
+        if res != None:
+            # print(f"{res.Id}")
+            ed = EventExtraData(EventId=res.Id, Data=extraData)
+            dbSession.add(ed)
+            dbSession.commit()
+        else:            
+            log.error(f"No event with eventKey {eventKey}")
+
+def process_event_extra_data(eventKey=None, extraData={}):
+    store_event_extra_data(eventKey,extraData)
+    with eng.connect() as con:        
+        dbSession = Session(bind=con)
+        trackId = extraData['track']['trackId']
+        res = dbSession.query(TrackData).filter_by(Id=trackId).first()    
+        if res == None:
+            dbSession.add(TrackData(Id=trackId, Data=extraData['track']))
+            dbSession.commit()
+        
         
 
 if __name__ == '__main__':
@@ -179,8 +213,9 @@ if __name__ == '__main__':
     # print(f'{read_events()}')
     # print(f'{read_wamp_data(eventId=15, tsBegin=1615734697.6675763, num=2)}')
     #print(f'{compose_replay_infos(20)}')
-    print(f'{read_wamp_data_diff(eventId=15, tsBegin=1615734697.6675763, num=5)}')
+    #print(f'{read_wamp_data_diff(eventId=15, tsBegin=1615734697.6675763, num=5)}')
     # with codecs.open("test.json", "w", encoding='utf-8') as f:
     #     res = compute_diffs(20)
     #     f.writelines(json.dumps(res))
+    store_event_extra_data("neox", {'a':'b', 'n':1})
 

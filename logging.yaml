@@ -16,6 +16,20 @@ loggers:
     level: DEBUG
     handlers: [console]
     propagate: no
+  
+  messageProcessor:
+    level: DEBUG
+    handlers: [console]
+    propagate: no
+  dbArchiver:
+    level: DEBUG
+    handlers: [console]
+    propagate: no
+  fileArchiver:
+    level: DEBUG
+    handlers: [console]
+    propagate: no
+  
 
 root:
   level: DEBUG

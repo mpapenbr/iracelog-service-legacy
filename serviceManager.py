@@ -1,4 +1,4 @@
-from dbAccess import compose_replay_infos, compute_diffs, read_events, read_manifest, read_wamp_data, read_wamp_data_diff, read_event_info
+from dbAccess import compose_replay_infos, compute_diffs, process_event_extra_data, read_events, read_manifest, get_track_info, read_wamp_data, read_wamp_data_diff, read_event_info, store_event_extra_data
 import sys
 import asyncio
 import argparse
@@ -19,6 +19,9 @@ import json
 
 from logging import Logger, debug
 import logging.config
+
+
+
 class ConfigSection():
     def __init__(self, websocket="ws://hostname:port", realm="racelog", rpcEndpoint="racelog.manager",logdir="logs/json", user="datapublisher", credentials=None, dbUrl=None):        
         self.websocket = websocket
@@ -58,11 +61,11 @@ def main():
     
     @comp.on_join
     async def joined(session, details):
-        print("service manager session ready")
+        log.info("service manager session ready")
         mySession = session
 
         def register_provider(args):
-            print(f'called with {args}')
+            log.debug(f'called with {args}')
 
             # inform other handlers about the new provider
             mySession.publish(f'racelog.manager.provider', args)
@@ -70,14 +73,14 @@ def main():
             key = args['id']
             if key not in serviceLookup.keys():
                 serviceLookup[key] = ProviderData(key=key, manifests=args['manifests'], info=args['info'])
-                p = Process(target=livetimingMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key, f'racelog.state.{key}', f'racelog.manager.command.{key}', crossbarConfig.user, crossbarConfig.credentials)))
+                p = Process(name="liveTiming", target=livetimingMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key, f'racelog.state.{key}', f'racelog.manager.command.{key}', crossbarConfig.user, crossbarConfig.credentials)))
                 p.start()
                 # p.daemon()                
 
-                p = Process(target=fileArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'racelog.manager.command.{key}')))
+                p = Process(name="fileArchiver", target=fileArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'racelog.manager.command.{key}')))
                 p.start()
                 
-                p = Process(target=dbArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'racelog.manager.command.{key}')))
+                p = Process(name="dbArchiver", target=dbArchiverMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key,  f'racelog.state.{key}', f'racelog.manager.command.{key}')))
                 p.start()
                 
 
@@ -107,6 +110,7 @@ def main():
                 return [serviceLookup[key].info]
             return None
             
+        
         # Archive manager (move to own module)        
 
         def retrieve_archiver_manifest_db(eventKey):
@@ -178,14 +182,19 @@ def main():
         # this is here to play around with different result types. use call on racelog.test to see results
         def test_something():            
             return CallResult("Huhu", ["xyz"], {'i':12, 's':"34"}, res0="single", res1=["abc"], res2={'a':12, 'c':"34"})
+
+
         try:
-            print("joined {}: {}".format(session, details))
+            log.info("joined {}: {}".format(session, details))
             
             await session.register(register_provider, "racelog.register_provider")
             await session.register(remove_provider, "racelog.remove_provider")
             await session.register(list_provider, "racelog.list_providers")
             await session.register(get_provider_manifests, "racelog.get_manifests")
             await session.register(get_event_info, "racelog.get_event_info")
+            await session.register(process_event_extra_data, "racelog.store_event_extra_data")
+            await session.register(get_track_info, "racelog.get_track_info")
+
 
             # Archive manager
             await session.register(retrieve_archived_events, f"racelog.archive.events")
@@ -196,7 +205,7 @@ def main():
             
             await session.register(retrieve_archived_event_info, f"racelog.archive.event_info")
             await session.register(retrieve_archived_replay_data, f"racelog.archive.replay_data")
-            # Archive manager (end)
+
             # Archive manager (end)
 
              # debug listener, which simulate a race
@@ -207,7 +216,7 @@ def main():
 
             # await session.subscribe(ondata, u'livetiming.directory')        
         except Exception as e:
-            print("error registering rpc: {0}".format(e))
+            log.error("error registering rpc: {0}".format(e))
 
     run([comp], log_level='debug')            
 

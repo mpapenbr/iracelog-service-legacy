@@ -26,15 +26,29 @@ class Event(Base):
 
 class WampData(Base):
     __tablename__ = "wampdata"
-    id = Column(Integer, name="id", primary_key=True)        
+    Id = Column(Integer, name="id", primary_key=True)        
     EventId = Column(Integer, ForeignKey("event.id"),  name="event_id", nullable=False)
-    Data = Column(postgresql.JSONB, name="data")
-    Stamp = Column(Float, name="stamp", nullable=True)
+    Data = Column(postgresql.JSONB, name="data")    
     Event = relationship("Event")
 
 class AnalysisData(Base):
     __tablename__ = "analysis"
-    id = Column(Integer, name="id", primary_key=True)        
+    Id = Column(Integer, name="id", primary_key=True)        
+    EventId = Column(Integer, ForeignKey("event.id"),  name="event_id", nullable=False)
+    Data = Column(postgresql.JSONB, name="data")        
+
+class TrackData(Base):
+    __tablename__ = "track"
+    Id = Column(Integer, name="id", primary_key=True)            
+    Data = Column(postgresql.JSONB, name="data")        
+
+
+class EventExtraData(Base):
+    """
+    contains data collected during event which may be usesful some time ;)
+    """
+    __tablename__ = "event_ext"
+    Id = Column(Integer, name="id", primary_key=True)            
     EventId = Column(Integer, ForeignKey("event.id"),  name="event_id", nullable=False)
     Data = Column(postgresql.JSONB, name="data")        
 
