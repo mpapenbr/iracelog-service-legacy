@@ -106,6 +106,7 @@ def read_wamp_data_diff(eventId=None,tsBegin=None, num=10):
                 'session': compute_session_changes(ref['payload']['session'], cur['payload']['session']),
                 }
             ret.append({'type':MessageType.STATE_DELTA.value, 'payload':entry, 'timestamp':cur['timestamp']})
+            ref = cur
             
         return ret
 
@@ -217,5 +218,7 @@ if __name__ == '__main__':
     # with codecs.open("test.json", "w", encoding='utf-8') as f:
     #     res = compute_diffs(20)
     #     f.writelines(json.dumps(res))
-    store_event_extra_data("neox", {'a':'b', 'n':1})
+    #store_event_extra_data("neox", {'a':'b', 'n':1})
+    print(f'{read_wamp_data_diff(eventId=35, tsBegin=1624198533.740097, num=5)}')
+
 
