@@ -94,8 +94,10 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             with eng.connect() as con:
                 dbSession = Session(bind=con)
                 entry = dbSession.query(Event).filter_by(EventKey=id).first()    
-                if (entry == None):
-                    entry = Event(Name=f"test-{id}", EventKey=id, Data=event_data)
+                if (entry == None):                    
+                    entry = Event(Name=event_data['info']['name'], EventKey=id, Data=event_data)
+                    if 'description' in event_data['info']:
+                        entry.Description = event_data['info']['description']
                     dbSession.add(entry)
                     dbSession.flush()
                 dbSession.commit()

@@ -72,7 +72,11 @@ def main():
 
             key = args['id']
             if key not in serviceLookup.keys():
-                serviceLookup[key] = ProviderData(key=key, manifests=args['manifests'], info=args['info'])
+                pd = ProviderData(key=key, manifests=args['manifests'], name=args['info']['name'],info=args['info'])
+                if 'description' in args['info']:
+                    pd.description = args['info']['description']
+                serviceLookup[key] = pd
+                
                 p = Process(name="liveTiming", target=livetimingMain, args=((crossbarConfig.websocket, crossbarConfig.realm, key, f'racelog.state.{key}', f'racelog.manager.command.{key}', crossbarConfig.user, crossbarConfig.credentials)))
                 p.start()
                 # p.daemon()                
