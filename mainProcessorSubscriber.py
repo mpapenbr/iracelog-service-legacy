@@ -67,7 +67,10 @@ def runDirect(crossbar_websocket=None, realm="racelog", id=None, topic=None, mgr
             mySession.publish(f"racelog.session.{id}", {'type': MessageType.SESSION.value, 'timestamp': a['timestamp'], 'data':x})
             mySession.publish(f"racelog.messages.{id}", {'type': MessageType.INFO.value, 'timestamp': a['timestamp'], 'sessionTime': sessionTime,'data':a['payload']['messages']})
             mySession.publish(f"racelog.cars.{id}", {'type': MessageType.CARS.value, 'timestamp': a['timestamp'], 'sessionTime': sessionTime, 'data':a['payload']['cars']})
-            mySession.publish(f"racelog.pits.{id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'sessionTime':sessionTime, 'data':a['payload']['pits']})
+            if 'pits' in a['payload']:
+                mySession.publish(f"racelog.pits.{id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'sessionTime':sessionTime, 'data':a['payload']['pits']})
+            else:
+                mySession.publish(f"racelog.pits.{id}", {'type': MessageType.PITS.value, 'timestamp': a['timestamp'], 'sessionTime':sessionTime, 'data': []})                
             
 
         try:

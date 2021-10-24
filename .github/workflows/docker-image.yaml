@@ -12,7 +12,7 @@ jobs:
       - name: Prep
         id: prep
         run: |
-          GHCR_IMAGE=ghcr.io/${{ github.repository_owner }}/iracelog-service
+          GHCR_IMAGE=ghcr.io/${{ github.repository_owner }}/iracelog-service-legacy
           VERSION=edge
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
